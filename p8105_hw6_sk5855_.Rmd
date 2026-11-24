@@ -8,6 +8,7 @@ editor_options:
 ---
 
 ```{r problem 1}
+## Problem 1
 library(tidyverse)
 
 homicide_df = read_csv("homicide-data.csv",
@@ -67,11 +68,44 @@ city_nested
 
 city_models =
   city_nested |>
-  mutate(
+  mutate( 
     fit = map(data, fit_city_model),
     results = map(fit, broom::tidy)
   )
 
 city_models
+
+city_or_df =
+  city_models |>
+  select(city_state, results) |>
+  unnest(cols = results) |>
+  filter(term == "victim_sexMale") |>
+  mutate(
+    OR = exp(estimate),
+    lower_ci = exp(estimate - 1.96 * std.error),
+    upper_ci = exp(estimate + 1.96 * std.error)
+  ) |>
+  select(city_state, OR, lower_ci, upper_ci)
+
+city_or_df
+
+city_or_df |>
+  mutate(city_state = fct_reorder(city_state, OR)) |>
+  ggplot(aes(x = city_state, y = OR)) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "grey50") +
+  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), width = 0.2) +
+  geom_point() +
+  coord_flip() +
+  labs(
+    x = NULL,
+    y = "Adjusted odds ratio (male vs female victims)",
+    title = "Odds of homicide resolution across U.S. cities"
+  ) +
+  theme_minimal()
+```
+In most cities, cases involving male victims had lower estimated odds of resolution than cases involving female victims after adjustment for victim age and race. The 95% confidence intervals were entirely below 1 in cities such as Baltimore and New York. In Long Beach, the point estimate was similar to Baltimore’s, but the wider interval included 1, indicating greater uncertainty about the association.
+
+```{r problem2}
+## Problem 2
 ```
 
