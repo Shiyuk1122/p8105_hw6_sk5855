@@ -1,0 +1,55 @@
+---
+title: "p8105_hw6_sk5855"
+author: "Shiyu KANG"
+date: "2026-11-24"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r problem 1}
+library(tidyverse)
+
+homicide_df = read_csv("homicide-data.csv",
+                       na = c("","NA","Unknown")) |>
+  mutate(
+    city_state = str_c(city, state, sep = ", "),
+    resolved = as.numeric(disposition == "Closed by arrest"),
+    victim_race = fct_relevel(victim_race, "White"),
+    victim_sex = fct_relevel(victim_sex, "Female")
+  ) |>
+  filter(
+     city_state != "Dallas, TX",
+     city_state != "Phoenix, AZ",
+     city_state != "Kansas City, MO",
+     city_state != "Tulsa, AL",
+     victim_race == "Black" | victim_race == "White"
+  ) |>
+  select(city_state, resolved, victim_age, victim_race, victim_sex)
+
+baltimore_df =
+  homicide_df |>
+  filter(city_state == "Baltimore, MD")
+
+baltimore_fit =
+  glm(
+    resolved ~ victim_age + victim_race + victim_sex,
+    data = baltimore_df,
+    family = binomial()
+  )
+
+baltimore_result =
+  baltimore_fit |>
+  broom::tidy() |>
+  filter(term == "victim_sexMale") |>
+  mutate(
+    OR = exp(estimate),
+    lower_ci = exp(estimate - 1.96 * std.error),
+    upper_ci = exp(estimate + 1.96 * std.error)
+  ) |>
+  select(term, OR, lower_ci, upper_ci)
+
+baltimore_result
+
+```
+
