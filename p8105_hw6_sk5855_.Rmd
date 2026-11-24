@@ -51,5 +51,27 @@ baltimore_result =
 
 baltimore_result
 
+fit_city_model = function(df) {
+  glm(
+    resolved ~ victim_age + victim_race + victim_sex,
+    data = df,
+    family = binomial()
+  )
+}
+
+city_nested =
+  homicide_df |>
+  nest(data = c(resolved, victim_age, victim_race, victim_sex))
+
+city_nested
+
+city_models =
+  city_nested |>
+  mutate(
+    fit = map(data, fit_city_model),
+    results = map(fit, broom::tidy)
+  )
+
+city_models
 ```
 
