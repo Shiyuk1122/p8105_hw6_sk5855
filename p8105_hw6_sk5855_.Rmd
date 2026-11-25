@@ -7,8 +7,8 @@ editor_options:
   chunk_output_type: console
 ---
 
-```{r problem 1}
 ## Problem 1
+```{r problem 1}
 library(tidyverse)
 
 homicide_df = read_csv("homicide-data.csv",
@@ -89,6 +89,8 @@ city_or_df =
 
 city_or_df
 
+#plots
+
 city_or_df |>
   mutate(city_state = fct_reorder(city_state, OR)) |>
   ggplot(aes(x = city_state, y = OR)) +
@@ -105,7 +107,31 @@ city_or_df |>
 ```
 In most cities, cases involving male victims had lower estimated odds of resolution than cases involving female victims after adjustment for victim age and race. The 95% confidence intervals were entirely below 1 in cities such as Baltimore and New York. In Long Beach, the point estimate was similar to Baltimore’s, but the wider interval included 1, indicating greater uncertainty about the association.
 
-```{r problem2}
+
 ## Problem 2
+```{r problem2}
+library(p8105.datasets)
+data("weather_df")
+central_park_df = weather_df |>
+  filter(name == "CentralPark_NY")
+
+fit = lm(tmax ~ tmin + prcp, data = central_park_df)
+
+summary(fit)
+
+broom::glance(fit) |>
+  select(r.squared)
+
+broom::tidy(fit) |>
+  summarize(
+    beta_ratio = estimate[term == "tmin"] / estimate[term == "prcp"]
+  )
+
+get_weather_estimates = function(df) {
+  model = lm(tmax ~ tmin + prcp, data = as.data.frame(df))
+  
+  model_stats = broom::glance(model)
+  coef_table = 
+}
 ```
 
