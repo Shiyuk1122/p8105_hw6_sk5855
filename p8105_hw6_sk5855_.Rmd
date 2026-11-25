@@ -127,11 +127,163 @@ broom::tidy(fit) |>
     beta_ratio = estimate[term == "tmin"] / estimate[term == "prcp"]
   )
 
+#bootstraping 
+
 get_weather_estimates = function(df) {
   model = lm(tmax ~ tmin + prcp, data = as.data.frame(df))
   
   model_stats = broom::glance(model)
-  coef_table = 
+  coef_table = broom::tidy(model)
+  
+  beta_tmin = coef_table$estimate[coef_table$term == "tmin"]
+  beta_prcp = coef_table$estimate[coef_table$term == "prcp"]
+
+  tibble(
+    r_squared = model_stats$r.squared,
+    beta_ratio = beta_tmin / beta_prcp
+  )
 }
+
+set.seed(42)
+
+boot_samples =
+  central_park_df |>
+  drop_na(tmax, tmin, prcp) |>
+  modelr::bootstrap(n = 5000)
+
+boot_samples
+
+bootstrap_results =
+  boot_samples |>
+  mutate(estimates = map(strap, get_weather_estimates)) |>
+  select(.id, estimates) |>
+  unnest(estimates)
+
+bootstrap_results
+
+bootstrap_results |>
+  summarize(
+    r2_lower = quantile(r_squared, 0.025),
+    r2_upper = quantile(r_squared, 0.975),
+    ratio_lower = quantile(beta_ratio, 0.025),
+    ratio_upper = quantile(beta_ratio, 0.975)
+  )
 ```
 
+```{r}
+bootstrap_results |>
+  ggplot(aes(x = r_squared)) +
+  geom_histogram(bins = 35, fill = "steelblue", color = "white") +
+  labs(
+    title = "Bootstrap distribution of R-squared",
+    x = "R-squared",
+    y = "Number of bootstrap samples"
+  ) +
+  theme_minimal()
+
+bootstrap_results |>
+  ggplot(aes(x = beta_ratio)) +
+  geom_histogram(bins = 60, fill = "steelblue", color = "white") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_x_continuous(
+    trans = scales::pseudo_log_trans(sigma = 100),
+    breaks = c(-1e6, -1e4, -1e3, 0, 1e3, 1e4, 1e6),
+    labels = scales::label_number(big.mark = ",")
+  ) +
+  labs(
+    title = "Bootstrap distribution of the slope ratio",
+    x = "Slope for tmin / slope for prcp (pseudo-log scale)",
+    y = "Number of bootstrap samples"
+  ) +
+  theme_minimal()
+```
+
+Across 5,000 bootstrap samples, the \(R^2\) estimates were concentrated around 0.91, with a 95% percentile interval of (0.894, 0.928). The slope ratio had a much wider distribution, with extreme values in both directions and a 95% percentile interval of approximately (−5,931, 4,724). This variability arises because the estimated precipitation slope is close to zero, so small changes in the denominator can produce large changes in the ratio.
+
+
+## Problem 3
+
+```{r}
+library(modelr)
+
+birthweight_df =
+  read_csv("birthweight.csv", show_col_types = FALSE) |>
+  mutate(
+    babysex = factor(babysex, levels = c(1, 2), labels = c("Male", "Female")),
+    malform = factor(malform, levels = c(0, 1), labels = c("Absent", "Present")),
+    mrace = factor(mrace),
+    frace = factor(frace)
+  )
+
+glimpse(birthweight_df)
+colSums(is.na(birthweight_df))
+
+proposed_fit =
+  lm(bwt ~ bhead + blength + gaweeks, data = birthweight_df)
+
+birthweight_df |>
+  add_predictions(proposed_fit) |>
+  add_residuals(proposed_fit) |>
+  ggplot(aes(x = pred, y = resid)) +
+  geom_point(alpha = 0.25) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    title = "Residuals versus fitted birthweight",
+    x = "Fitted birthweight (g)",
+    y = "Residual (g)"
+  ) +
+  theme_minimal()
+```
+
+I modeled birthweight as a function of head circumference, birth length, and gestational age. Head circumference and length describe infant size at birth, while gestational age captures the duration of fetal development. I included these predictors as additive main effects.
+
+
+```{r}
+set.seed(42)
+
+cv_df =
+  crossv_mc(birthweight_df, n = 100, test = 0.2) |>
+  mutate(
+    proposed = map(train, \(df)
+      lm(bwt ~ bhead + blength + gaweeks, data = df)),
+
+    main_effects = map(train, \(df)
+      lm(bwt ~ blength + gaweeks, data = df)),
+
+    interaction = map(train, \(df)
+      lm(bwt ~ bhead * blength * babysex, data = df))
+  ) |>
+  mutate(
+    rmse_proposed = map2_dbl(proposed, test, rmse),
+    rmse_main_effects = map2_dbl(main_effects, test, rmse),
+    rmse_interaction = map2_dbl(interaction, test, rmse)
+  )
+
+cv_results =
+  cv_df |>
+  select(.id, rmse_proposed, rmse_main_effects, rmse_interaction) |>
+  pivot_longer(
+    cols = starts_with("rmse_"),
+    names_to = "model",
+    names_prefix = "rmse_",
+    values_to = "rmse"
+  )
+
+cv_results |>
+  group_by(model) |>
+  summarize(mean_rmse = mean(rmse)) |>
+  arrange(mean_rmse)
+
+cv_results =
+  cv_df |>
+  select(.id, rmse_proposed, rmse_main_effects, rmse_interaction) |>
+  pivot_longer(
+    cols = starts_with("rmse_"),
+    names_to = "model",
+    names_prefix = "rmse_",
+    values_to = "rmse"
+  )
+
+```
+
+Across 100 random train–test splits, the proposed model had the lowest mean test RMSE (286g), closely followed by the interaction model (289g). The model using only birth length and gestational age had a higher mean RMSE (332g). Adding head circumference to that model reduced mean test RMSE by about 46 g.
